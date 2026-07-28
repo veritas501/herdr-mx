@@ -16,8 +16,9 @@ use serde::{Deserialize, Serialize};
 /// v14 (mx): `FrameDelta` carries `base_checksum` and clients may send `RequestFullFrame`
 /// (delta-desync recovery). v18: upstream v0.7.4 merge — unions upstream's v17 additions
 /// (terminal observe/control streams, `PrefixInputSource`) after the mx variants; bumped past
-/// both lines (mx 14, upstream 17) so neither side's peers can false-match.
-pub const PROTOCOL_VERSION: u32 = 18;
+/// both lines (mx 14, upstream 17) so neither side's peers can false-match. v19 adds focused-pane
+/// Kitty report-all propagation to the foreground client.
+pub const PROTOCOL_VERSION: u32 = 19;
 
 /// Maximum allowed frame payload size (2 MB). Frames larger than this are
 /// rejected to prevent denial-of-service via oversized length prefixes.
@@ -838,6 +839,12 @@ pub enum ServerMessage {
     /// after `Frame`; herdr-mx appends it here so the mx wire tags (Compressed = 11 etc.) stay
     /// stable across the upstream v0.7.4 merge — version parity gates mixed-version peers anyway.
     Terminal(TerminalFrame),
+
+    /// Whether the focused terminal requests Kitty report-all keyboard input.
+    KittyKeyboardReportAll {
+        /// True only while the focused pane requests `REPORT_ALL_KEYS_AS_ESCAPE_CODES`.
+        enabled: bool,
+    },
 }
 
 // ---------------------------------------------------------------------------
@@ -1767,6 +1774,15 @@ mod tests {
     #[test]
     fn server_mouse_capture_roundtrip() {
         let msg = ServerMessage::MouseCapture { enabled: true };
+        let encoded = bincode::serde::encode_to_vec(&msg, bincode::config::standard()).unwrap();
+        let (decoded, _): (ServerMessage, _) =
+            bincode::serde::decode_from_slice(&encoded, bincode::config::standard()).unwrap();
+        assert_eq!(msg, decoded);
+    }
+
+    #[test]
+    fn server_kitty_keyboard_report_all_roundtrip() {
+        let msg = ServerMessage::KittyKeyboardReportAll { enabled: true };
         let encoded = bincode::serde::encode_to_vec(&msg, bincode::config::standard()).unwrap();
         let (decoded, _): (ServerMessage, _) =
             bincode::serde::decode_from_slice(&encoded, bincode::config::standard()).unwrap();

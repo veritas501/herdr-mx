@@ -5397,11 +5397,8 @@ lines = [
         let p = Palette::catppuccin();
         let colors = |spans: &[Span<'static>]| spans.iter().map(|s| s.style.fg).collect::<Vec<_>>();
 
-        // Static (speed 0): tick 0 == tick N.
-        let static_cfg = crate::config::SidebarHostConfig {
-            animation: crate::config::HostBannerAnimation::Static,
-            ..Default::default()
-        };
+        // The default banner is static: advancing the shared UI tick cannot move its colors.
+        let static_cfg = crate::config::SidebarHostConfig::default();
         let at_0 = host_banner_spans("demo", 0, &static_cfg, &p);
         let at_n = host_banner_spans("demo", 64, &static_cfg, &p);
         assert_eq!(colors(&at_0), colors(&at_n), "static ignores tick");

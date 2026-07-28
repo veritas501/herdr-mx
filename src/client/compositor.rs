@@ -1427,6 +1427,17 @@ impl ClientCompositor {
                 excluded_rects.extend(crate::ui::remote_manage_confirm_popup_rect(anchor_area));
             }
         }
+        if matches!(snapshot.app.mode, Mode::Prefix) {
+            let area = snapshot.app.view.terminal_area;
+            if area.width > 0 && area.height > 0 {
+                excluded_rects.push(Rect::new(
+                    area.x,
+                    area.y + area.height.saturating_sub(1),
+                    area.width,
+                    1,
+                ));
+            }
+        }
         let frame = render_client_shell(&snapshot, host_width, host_height);
 
         // item 1/3: the add-remote / new-workspace-picker / manage modals are rendered as ratatui
@@ -1979,26 +1990,38 @@ impl ClientSidebarSnapshot {
             host_width.saturating_sub(sidebar_width),
             host_height,
         );
+        if compositor.prefix_armed {
+            let config = crate::config::Config::load().config;
+            let (prefix_code, prefix_mods) = config.prefix_key();
+            app.prefix_code = prefix_code;
+            app.prefix_mods = prefix_mods;
+            app.keybinds = config.keybinds();
+        }
+
         // #47: the global launcher uses the unified `ClientMenu` STATE (one keyboard/hover/dismiss/
         // modal path), but KEEPS its original visual surface — the server's `Mode::GlobalMenu` +
         // `render_global_launcher_menu` dropdown (no modal header, button-anchored, badge dots) — so
         // the "menu" button looks exactly as it always did. Only the two right-click CONTEXT menus
         // render through the unified overlay. Map an open launcher ClientMenu back onto the AppState
         // global-menu surface here so render/hit-test read the original geometry.
-        app.mode = match model.client_menu() {
-            Some(menu)
-                if matches!(
-                    menu.kind,
-                    crate::client::supervisor::ClientMenuKind::GlobalLauncher
-                ) =>
-            {
-                app.global_menu = MenuListState::new(
-                    menu.selected
-                        .min(app.global_menu_labels().len().saturating_sub(1)),
-                );
-                Mode::GlobalMenu
+        app.mode = if compositor.prefix_armed {
+            Mode::Prefix
+        } else {
+            match model.client_menu() {
+                Some(menu)
+                    if matches!(
+                        menu.kind,
+                        crate::client::supervisor::ClientMenuKind::GlobalLauncher
+                    ) =>
+                {
+                    app.global_menu = MenuListState::new(
+                        menu.selected
+                            .min(app.global_menu_labels().len().saturating_sub(1)),
+                    );
+                    Mode::GlobalMenu
+                }
+                _ => Mode::Navigate,
             }
-            _ => Mode::Navigate,
         };
 
         let mut agents_by_workspace = HashMap::<(ServerId, String), Vec<AgentSidebarRow>>::new();
@@ -2418,6 +2441,13 @@ fn render_client_shell(
                 // The right-aligned filter label belongs to the expanded layout only; the 4-col
                 // mini strip has no room for it.
                 render_filter_label(snapshot, frame);
+            }
+            if matches!(snapshot.app.mode, Mode::Prefix) {
+                crate::ui::render_prefix_overlay(
+                    &snapshot.app,
+                    frame,
+                    snapshot.app.view.terminal_area,
+                );
             }
             // item 1: render the composited client overlays as footer-anchored popups that float
             // over the live content — the proven `render_global_launcher_menu` compositing path.
@@ -3760,6 +3790,25 @@ mod tests {
                     .as_str()
             })
             .collect()
+    }
+
+    #[test]
+    fn prefix_armed_composition_renders_footer_over_live_content() {
+        let model = ClientSupervisorModel::new("local");
+        let mut compositor = ClientCompositor::new(26);
+        compositor.arm_prefix(vec![0x02]);
+
+        let filled = "#".repeat(34);
+        let rows = vec![filled.as_str(); 8];
+        let content = frame(34, 8, &rows);
+        let armed = compositor.compose_frame(&model, &content, 60, 8, std::time::Instant::now());
+
+        assert!(row_text(&armed, 7).contains("PREFIX"));
+
+        compositor.disarm_prefix();
+        let disarmed = compositor.compose_frame(&model, &content, 60, 8, std::time::Instant::now());
+        let content_row: String = row_text(&disarmed, 7).chars().skip(26).collect();
+        assert_eq!(content_row, filled);
     }
 
     #[test]
@@ -6417,8 +6466,8 @@ mod tests {
         assert!(sidebar_wants_animation(&model));
     }
 
-    /// Force the host-banner animation off so a test can isolate the agent-driven animation
-    /// gate (item 2 (C3): a visible Secondary now animates its banner by default).
+    /// Force the host-banner animation off so a test can isolate the agent-driven animation gate.
+    /// This mirrors the current default and remains explicit at the test boundary.
     fn with_static_host_banner(model: &mut ClientSupervisorModel) {
         let mut ui_settings = model.ui_settings().clone();
         ui_settings.sidebar_host.animation = crate::config::HostBannerAnimation::Static;
@@ -6441,11 +6490,12 @@ mod tests {
 
     #[test]
     fn sidebar_wants_animation_true_with_banner() {
-        // item 2 (C3): the banner hook is now the real gate. With no working agent the gate is
-        // driven solely by `host_banner_animation_active` — a visible Secondary with the default
-        // Animated setting makes the gate true (proving the banner hook is the single
-        // banner-active input the gate reads).
-        let (model, _) = model_with_agent_status("idle");
+        // A visible Secondary only drives the animation gate after an explicit Animated opt-in.
+        // With no working agent, this isolates the host-banner animation source.
+        let (mut model, _) = model_with_agent_status("idle");
+        let mut ui_settings = model.ui_settings().clone();
+        ui_settings.sidebar_host.animation = crate::config::HostBannerAnimation::Animated;
+        model.set_ui_settings(ui_settings);
         assert!(model.host_banner_animation_active());
         assert!(sidebar_wants_animation(&model));
         assert_eq!(

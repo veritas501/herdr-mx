@@ -98,6 +98,10 @@ struct ClientState {
     frame_stats: ClientFrameStats,
     /// Whether host mouse capture is currently active.
     mouse_capture_active: bool,
+    /// Whether the current host keyboard stack entry reports every key as Kitty CSI-u.
+    keyboard_report_all_active: bool,
+    /// Last report-all mode announced by each connected server.
+    keyboard_report_all_by_server: HashMap<supervisor::ServerId, bool>,
     /// The terminal size we reported to the server in our last Hello/Resize.
     reported_size: (u16, u16),
     /// The outer terminal size owned by the client compositor.
@@ -2193,6 +2197,29 @@ fn set_mouse_capture(enabled: bool) -> io::Result<()> {
 
 fn desired_mouse_capture(server_enabled: bool, client_compositor_enabled: bool) -> bool {
     server_enabled || client_compositor_enabled
+}
+
+fn desired_keyboard_report_all(state: &ClientState) -> bool {
+    let client_prefix_armed = state
+        .compositor
+        .as_ref()
+        .is_some_and(compositor::ClientCompositor::prefix_armed);
+    let server_requested = state
+        .keyboard_report_all_by_server
+        .get(&active_server_id(state))
+        .copied()
+        .unwrap_or(false);
+    client_prefix_armed || server_requested
+}
+
+fn sync_host_keyboard_report_all(state: &mut ClientState) -> io::Result<()> {
+    let desired = desired_keyboard_report_all(state);
+    if desired == state.keyboard_report_all_active {
+        return Ok(());
+    }
+    crate::terminal_modes::set_host_kitty_keyboard_report_all(&mut io::stdout(), desired)?;
+    state.keyboard_report_all_active = desired;
+    Ok(())
 }
 
 fn restore_terminal_state(reset_modify_other_keys: bool) {
@@ -4859,6 +4886,8 @@ async fn run_client_loop(
         blit_encoder: render_ansi::BlitEncoder::new(),
         frame_stats: ClientFrameStats::default(),
         mouse_capture_active,
+        keyboard_report_all_active: false,
+        keyboard_report_all_by_server: HashMap::new(),
         reported_size,
         host_size,
         cell_size_px,
@@ -5019,6 +5048,7 @@ async fn run_client_loop(
     // This (foreground) client owns the prefix ASCII input-source switch; a no-op on non-macOS.
     let mut prefix_input_source = crate::platform::RealPrefixInputSource::default();
     while !should_quit.load(Ordering::Acquire) {
+        sync_host_keyboard_report_all(&mut state).map_err(ClientError::ConnectionFailed)?;
         // item 5: wake sooner (80ms) when the sidebar is animating, else keep the 100ms
         // housekeeping cadence (idle behavior unchanged). The gate reads the cached model only
         // and performs no I/O; real input still pre-empts the deadline via `event_rx.recv()`.
@@ -5627,6 +5657,11 @@ async fn run_client_loop(
                             set_mouse_capture(desired).map_err(ClientError::ConnectionFailed)?;
                             state.mouse_capture_active = desired;
                         }
+                    }
+                    ServerMessage::KittyKeyboardReportAll { enabled } => {
+                        state
+                            .keyboard_report_all_by_server
+                            .insert(server_id, enabled);
                     }
                     ServerMessage::Welcome { .. } => {
                         debug!("received unexpected Welcome in main loop");
@@ -7028,6 +7063,8 @@ mod tests {
             remote_image_paste_key: None,
             frame_stats: ClientFrameStats::default(),
             mouse_capture_active: false,
+            keyboard_report_all_active: false,
+            keyboard_report_all_by_server: HashMap::new(),
             reported_size: (80, 24),
             host_size: (80, 24),
             cell_size_px: (0, 0),
@@ -10160,6 +10197,36 @@ mod tests {
         assert!(desired_mouse_capture(true, true));
         assert!(desired_mouse_capture(true, false));
         assert!(!desired_mouse_capture(false, false));
+    }
+
+    #[test]
+    fn keyboard_report_all_tracks_active_server_and_client_prefix() {
+        let mut model = supervisor::ClientSupervisorModel::new("local");
+        let remote = model.add_secondary(test_remote_definition("remote", "remote"));
+        let mut state = test_client_state_with_model(model);
+
+        state
+            .keyboard_report_all_by_server
+            .insert(supervisor::ServerId::main(), true);
+        assert!(desired_keyboard_report_all(&state));
+
+        state
+            .supervisor_model
+            .as_mut()
+            .unwrap()
+            .set_active_server(remote.clone())
+            .unwrap();
+        assert!(!desired_keyboard_report_all(&state));
+
+        state
+            .keyboard_report_all_by_server
+            .insert(remote.clone(), true);
+        assert!(desired_keyboard_report_all(&state));
+
+        state.keyboard_report_all_by_server.insert(remote, false);
+        state.compositor = Some(compositor::ClientCompositor::new(26));
+        state.compositor.as_mut().unwrap().arm_prefix(vec![0x02]);
+        assert!(desired_keyboard_report_all(&state));
     }
 
     #[test]

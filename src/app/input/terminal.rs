@@ -229,6 +229,27 @@ impl App {
         }
     }
 
+    pub(crate) fn host_keyboard_report_all_requested(&self) -> bool {
+        if self.state.popup_pane.is_none()
+            && matches!(self.state.mode, Mode::Prefix | Mode::Navigate)
+        {
+            return true;
+        }
+
+        let runtime = if self.state.popup_pane.is_some() {
+            self.popup_runtime()
+        } else if self.state.mode == Mode::Terminal {
+            self.state.active.and_then(|ws_idx| {
+                self.state
+                    .focused_runtime_in_workspace(&self.terminal_runtimes, ws_idx)
+            })
+        } else {
+            None
+        };
+
+        runtime.is_some_and(|runtime| runtime.keyboard_protocol().reports_all_keys())
+    }
+
     pub(super) async fn handle_terminal_key(&mut self, key: TerminalKey) {
         match self.prepare_popup_key_forward(key) {
             PreparedPopupInput::NotOpen => {}

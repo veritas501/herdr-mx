@@ -610,6 +610,7 @@ impl HeadlessServer {
 
             self.drain_client_config_reload_request();
             self.stream_host_mouse_capture_mode();
+            self.stream_host_keyboard_enhancement_flags();
 
             self.app.sync_headless_animation_timer(now);
 
@@ -3376,6 +3377,44 @@ impl HeadlessServer {
                 continue;
             }
             client.host_mouse_capture_active = Some(enabled);
+        }
+
+        for client_id in broken_clients {
+            self.remove_client_and_resize_if_needed(client_id);
+        }
+    }
+
+    fn stream_host_keyboard_enhancement_flags(&mut self) {
+        let report_all_keys = self.app.host_keyboard_report_all_requested();
+        let serialized = match Self::frame_server_message(&ServerMessage::KittyKeyboardReportAll {
+            enabled: report_all_keys,
+        }) {
+            Ok(framed) => framed,
+            Err(err) => {
+                warn!(err = %err, "failed to serialize keyboard enhancement flags for clients");
+                return;
+            }
+        };
+
+        let mut broken_clients = Vec::new();
+        for (&client_id, client) in &mut self.clients {
+            if !client.is_full_app_client()
+                || client.host_keyboard_report_all_active == Some(report_all_keys)
+            {
+                continue;
+            }
+            let Some(writer) = &client.writer else {
+                continue;
+            };
+            if writer.control.send(serialized.clone()).is_err() {
+                debug!(
+                    client_id,
+                    "client writer channel closed during keyboard enhancement update"
+                );
+                broken_clients.push(client_id);
+                continue;
+            }
+            client.host_keyboard_report_all_active = Some(report_all_keys);
         }
 
         for client_id in broken_clients {
@@ -8071,6 +8110,38 @@ next_tab = ""
                     .expect("mouse capture message")
             ),
             ServerMessage::MouseCapture { enabled: true }
+        ));
+    }
+
+    #[tokio::test]
+    async fn focused_report_all_pane_updates_headless_client_keyboard_flags() {
+        let mut server = test_headless_server();
+        let (client_tx, client_control_rx, _client_rx) = test_client_writer();
+        server.clients.insert(
+            1,
+            ClientConnection::new(
+                (80, 24),
+                crate::kitty_graphics::HostCellSize::default(),
+                crate::terminal_theme::TerminalTheme::default(),
+                None,
+                1,
+                RenderEncoding::SemanticFrame,
+                Some(client_tx),
+            ),
+        );
+        let popup_runtime =
+            crate::terminal::TerminalRuntime::test_with_screen_bytes(40, 12, b"\x1b[>15u");
+        server.app.install_test_popup_runtime(popup_runtime);
+
+        server.stream_host_keyboard_enhancement_flags();
+
+        assert!(matches!(
+            read_server_message(
+                client_control_rx
+                    .recv_timeout(Duration::from_millis(100))
+                    .expect("keyboard enhancement message")
+            ),
+            ServerMessage::KittyKeyboardReportAll { enabled: true }
         ));
     }
 

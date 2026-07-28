@@ -113,6 +113,7 @@ pub(crate) struct WorkspaceSummary {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct AgentSummary {
+    /// Public `agent.focus` target from `AgentInfo.pane_id`; never the private terminal id.
     pub(crate) agent_id: String,
     pub(crate) workspace_id: String,
     pub(crate) label: String,
@@ -3705,7 +3706,7 @@ impl ServerSummary {
                     let label = agent_label(&agent);
                     let status = agent_status_label(agent.agent_status);
                     AgentSummary {
-                        agent_id: agent.terminal_id,
+                        agent_id: agent.pane_id,
                         workspace_id: agent.workspace_id,
                         label,
                         status,
@@ -4278,7 +4279,7 @@ mod tests {
                 label: "herdr".into(),
                 focused: true,
                 agents: vec![AgentSidebarRow {
-                    agent_id: "terminal-1".into(),
+                    agent_id: "pane-1".into(),
                     label: "claude".into(),
                     status: "working".into(),
                     focused: true,
@@ -5207,6 +5208,24 @@ mod tests {
                 },),
             })
         );
+    }
+
+    #[test]
+    fn api_summary_uses_public_pane_id_for_agent_focus_target() {
+        let agent: crate::api::schema::AgentInfo = serde_json::from_value(serde_json::json!({
+            "terminal_id": "term_private",
+            "agent_status": "idle",
+            "workspace_id": "remote-api",
+            "tab_id": "remote-api:t1",
+            "pane_id": "remote-api:p2",
+            "focused": false,
+            "revision": 1
+        }))
+        .unwrap();
+
+        let summary = ServerSummary::from_api(Vec::new(), vec![agent]);
+
+        assert_eq!(summary.agents[0].agent_id, "remote-api:p2");
     }
 
     #[test]

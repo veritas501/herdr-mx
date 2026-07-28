@@ -5,9 +5,15 @@
 ### Added
 - Added mixed remote headless server support: the thin client can manage secondary local or SSH-backed Herdr servers from the sidebar, persist the remote registry on the main server, show combined workspace and agent summaries, route workspace creation/focus to the selected server, and keep secondary disconnects isolated from the main session.
 
+### Changed
+- Host names in the Spaces sidebar now use a static rainbow gradient by default instead of continuously scrolling; set `ui.sidebar.host.animation = "animated"` to opt back in.
+
 ### Fixed
 - Fixed mixed remote client sidebar wheel scrolling so overflowed remote spaces can be reached and clicked.
 - Fixed SSH-backed mixed remote sidebar actions timing out too aggressively, so clicking remote spaces can route focus over slower remote API bridges.
+- Fixed the mixed remote client so arming the prefix key renders the standard PREFIX shortcut footer over the live pane content.
+- Fixed Agents sidebar clicks on remote panes by routing `agent.focus` with the public pane ID instead of the server-private terminal ID.
+- Fixed modified Enter keys such as Ctrl+Enter reaching Kitty-aware pane applications as plain Enter by synchronizing the focused pane's report-all keyboard mode with the foreground client terminal.
 
 ## [0.7.5] - 2026-07-21
 

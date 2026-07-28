@@ -873,7 +873,7 @@ impl Default for SidebarHostConfig {
     fn default() -> Self {
         Self {
             gradient: HostBannerGradient::Rainbow,
-            animation: HostBannerAnimation::Animated,
+            animation: HostBannerAnimation::Static,
             speed: HostBannerSpeed::Calm,
             glyph: HostBannerGlyph::Left,
             show_count: false,
@@ -1035,8 +1035,8 @@ fn parse_host_gradient(value: Option<&str>) -> HostBannerGradient {
 
 fn parse_host_animation(value: Option<&str>) -> HostBannerAnimation {
     match value {
-        Some("static") => HostBannerAnimation::Static,
-        _ => HostBannerAnimation::Animated,
+        Some("animated") => HostBannerAnimation::Animated,
+        _ => HostBannerAnimation::Static,
     }
 }
 
@@ -2589,7 +2589,7 @@ scrollback_lines = 12345
     fn sidebar_host_config_default() {
         let host = SidebarHostConfig::default();
         assert_eq!(host.gradient, HostBannerGradient::Rainbow);
-        assert_eq!(host.animation, HostBannerAnimation::Animated);
+        assert_eq!(host.animation, HostBannerAnimation::Static);
         assert_eq!(host.speed, HostBannerSpeed::Calm);
         assert_eq!(host.glyph, HostBannerGlyph::Left);
         assert!(!host.show_count);
@@ -2610,7 +2610,7 @@ glyph = "none"
         assert_eq!(config.ui.sidebar.host.gradient, HostBannerGradient::Rainbow);
         assert_eq!(
             config.ui.sidebar.host.animation,
-            HostBannerAnimation::Animated
+            HostBannerAnimation::Static
         );
         assert_eq!(config.ui.sidebar.host.speed, HostBannerSpeed::Calm);
         assert!(!config.ui.sidebar.host.show_count);
@@ -2631,10 +2631,26 @@ glyph = "right"
         assert_eq!(config.ui.sidebar.host.gradient, HostBannerGradient::Rainbow);
         assert_eq!(
             config.ui.sidebar.host.animation,
-            HostBannerAnimation::Animated
+            HostBannerAnimation::Static
         );
         assert_eq!(config.ui.sidebar.host.speed, HostBannerSpeed::Calm);
         assert_eq!(config.ui.sidebar.host.glyph, HostBannerGlyph::Left);
+    }
+
+    #[test]
+    fn sidebar_host_animation_requires_explicit_opt_in() {
+        let config: Config = toml::from_str(
+            r#"
+[ui.sidebar.host]
+animation = "animated"
+"#,
+        )
+        .unwrap();
+
+        assert_eq!(
+            config.ui.sidebar.host.animation,
+            HostBannerAnimation::Animated
+        );
     }
 
     #[test]

@@ -802,7 +802,7 @@ mod tests {
         assert!(rendered.contains("gradient"));
         assert!(rendered.contains("rainbow"));
         assert!(rendered.contains("animation"));
-        assert!(rendered.contains("animated"));
+        assert!(rendered.contains("static"));
         assert!(rendered.contains("speed"));
         assert!(rendered.contains("calm"));
         assert!(rendered.contains("glyph"));

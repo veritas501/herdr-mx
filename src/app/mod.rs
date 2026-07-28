@@ -925,6 +925,7 @@ impl App {
 
         let mut needs_render = true;
         let mut host_mouse_capture_active = self.state.mouse_capture;
+        let mut host_keyboard_report_all_active = false;
 
         while !self.state.should_quit {
             self.reap_finished_custom_commands();
@@ -1050,6 +1051,7 @@ impl App {
             let now = Instant::now();
             self.sync_animation_timer(now);
             self.sync_host_mouse_capture(&mut host_mouse_capture_active)?;
+            self.sync_host_keyboard_report_all(&mut host_keyboard_report_all_active)?;
 
             if needs_render && self.can_render_now(now) {
                 self.render_dirty.swap(false, Ordering::AcqRel);
@@ -1163,6 +1165,16 @@ impl App {
             self.save_session_now();
         }
 
+        Ok(())
+    }
+
+    fn sync_host_keyboard_report_all(&self, active: &mut bool) -> io::Result<()> {
+        let desired = self.host_keyboard_report_all_requested();
+        if desired == *active {
+            return Ok(());
+        }
+        crate::terminal_modes::set_host_kitty_keyboard_report_all(&mut io::stdout(), desired)?;
+        *active = desired;
         Ok(())
     }
 
@@ -5208,6 +5220,35 @@ last_pane = "prefix+tab"
     }
 
     #[tokio::test]
+    async fn host_report_all_follows_terminal_protocol_and_command_modes() {
+        let mut app = test_app();
+        let mut workspace = Workspace::test_new("test");
+        let focused = workspace.focused_pane_id().unwrap();
+        let (runtime, _rx) =
+            TerminalRuntime::test_with_channel_and_scrollback_bytes(80, 24, 0, b"\x1b[>15u", 1);
+        workspace.tabs[0].runtimes.insert(focused, runtime);
+        app.state.workspaces = vec![workspace];
+        app.state.active = Some(0);
+        app.state.selected = 0;
+        app.state.mode = Mode::Terminal;
+
+        assert!(app.host_keyboard_report_all_requested());
+
+        app.state
+            .runtime_for_pane_in_workspace(&app.terminal_runtimes, 0, focused)
+            .unwrap()
+            .test_process_pty_bytes(b"\x1b[<u");
+        assert!(!app.host_keyboard_report_all_requested());
+
+        app.state.mode = Mode::Prefix;
+        assert!(app.host_keyboard_report_all_requested());
+        app.state.mode = Mode::Navigate;
+        assert!(app.host_keyboard_report_all_requested());
+        app.state.mode = Mode::RenameWorkspace;
+        assert!(!app.host_keyboard_report_all_requested());
+    }
+
+    #[tokio::test]
     async fn route_client_input_reencodes_terminal_keys_for_focused_pane_protocol() {
         let mut app = test_app();
         let mut workspace = Workspace::test_new("test");
@@ -5232,6 +5273,32 @@ last_pane = "prefix+tab"
         assert_eq!(
             rx.recv().await.unwrap(),
             bytes::Bytes::from_static(b"\x1bOS")
+        );
+    }
+
+    #[tokio::test]
+    async fn route_client_input_preserves_ctrl_enter_for_report_all_pane() {
+        let mut app = test_app();
+        let mut workspace = Workspace::test_new("test");
+        let focused = workspace.focused_pane_id().unwrap();
+        let (runtime, mut rx) =
+            TerminalRuntime::test_with_channel_and_scrollback_bytes(80, 24, 0, b"\x1b[>15u", 2);
+        workspace.tabs[0].runtimes.insert(focused, runtime);
+        app.state.workspaces = vec![workspace];
+        app.state.active = Some(0);
+        app.state.selected = 0;
+        app.state.mode = Mode::Terminal;
+
+        app.route_client_input(b"\x1b[13;5u".to_vec());
+        app.route_client_input(b"\r".to_vec());
+
+        assert_eq!(
+            rx.recv().await.unwrap(),
+            bytes::Bytes::from_static(b"\x1b[13;5u")
+        );
+        assert_eq!(
+            rx.recv().await.unwrap(),
+            bytes::Bytes::from_static(b"\x1b[13u")
         );
     }
 
