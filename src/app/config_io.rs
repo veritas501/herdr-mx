@@ -69,9 +69,17 @@ impl App {
         }
     }
 
-    pub(super) fn save_sound(&mut self, enabled: bool) {
+    pub(super) fn save_sound(&mut self, choice: crate::config::SoundChoice) {
+        let (enabled, mode) = choice.resolve(self.state.sound.mode);
+        let mode = match mode {
+            crate::config::SoundMode::Music => "\"music\"",
+            crate::config::SoundMode::Bell => "\"bell\"",
+        };
+
         if self.update_config_file("sound setting", |content| {
-            crate::config::upsert_section_bool(content, "ui.sound", "enabled", enabled)
+            let content =
+                crate::config::upsert_section_bool(content, "ui.sound", "enabled", enabled);
+            crate::config::upsert_section_value(&content, "ui.sound", "mode", mode)
         }) {
             self.apply_config_from_disk(false);
         }
@@ -488,5 +496,43 @@ mod tests {
             on_disk.contains("nord"),
             "the updated value must be written"
         );
+    }
+    #[test]
+    fn save_sound_bell_writes_enabled_and_mode_together() {
+        let _guard = crate::config::test_config_env_lock().lock().unwrap();
+        let path = e2e_config_path("save-sound-bell");
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(&path, "[ui.sound]\nenabled = false\nmode = \"music\"\n").unwrap();
+        std::env::set_var(crate::config::CONFIG_PATH_ENV_VAR, &path);
+
+        let mut app = e2e_test_app();
+        app.save_sound(crate::config::SoundChoice::Bell);
+        let on_disk = std::fs::read_to_string(&path).unwrap();
+
+        std::env::remove_var(crate::config::CONFIG_PATH_ENV_VAR);
+        let _ = std::fs::remove_dir_all(path.parent().unwrap());
+
+        assert!(on_disk.contains("enabled = true"));
+        assert!(on_disk.contains("mode = \"bell\""));
+    }
+
+    #[test]
+    fn save_sound_off_preserves_current_mode() {
+        let _guard = crate::config::test_config_env_lock().lock().unwrap();
+        let path = e2e_config_path("save-sound-off");
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(&path, "[ui.sound]\nenabled = true\nmode = \"bell\"\n").unwrap();
+        std::env::set_var(crate::config::CONFIG_PATH_ENV_VAR, &path);
+
+        let mut app = e2e_test_app();
+        app.state.sound.mode = crate::config::SoundMode::Bell;
+        app.save_sound(crate::config::SoundChoice::Off);
+        let on_disk = std::fs::read_to_string(&path).unwrap();
+
+        std::env::remove_var(crate::config::CONFIG_PATH_ENV_VAR);
+        let _ = std::fs::remove_dir_all(path.parent().unwrap());
+
+        assert!(on_disk.contains("enabled = false"));
+        assert!(on_disk.contains("mode = \"bell\""));
     }
 }

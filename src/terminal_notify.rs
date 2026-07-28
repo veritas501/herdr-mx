@@ -1,4 +1,4 @@
-use std::io::{self, Write as _};
+use std::io::{self, Write};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TerminalNotificationBackend {
@@ -71,6 +71,16 @@ pub fn show_notification(title: &str, body: Option<&str>) -> io::Result<bool> {
     stdout.write_all(&sequence)?;
     stdout.flush()?;
     Ok(true)
+}
+
+pub fn emit_bell() -> io::Result<()> {
+    let mut stdout = io::stdout();
+    emit_bell_to(&mut stdout)
+}
+
+fn emit_bell_to(writer: &mut impl Write) -> io::Result<()> {
+    writer.write_all(b"\x07")?;
+    writer.flush()
 }
 
 pub fn split_message(message: &str) -> (&str, Option<&str>) {
@@ -155,6 +165,15 @@ mod tests {
     #[test]
     fn sanitize_text_strips_control_bytes() {
         assert_eq!(sanitize_text("a\n\tb\u{1b}c\u{7}"), "a  bc");
+    }
+
+    #[test]
+    fn bell_writes_one_byte_and_flushes() {
+        let mut output = Vec::new();
+
+        emit_bell_to(&mut output).unwrap();
+
+        assert_eq!(output, b"\x07");
     }
 
     #[test]

@@ -6,10 +6,39 @@ use crate::detect::Agent;
 
 use super::io::resolve_config_relative_path;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SoundMode {
+    #[default]
+    Music,
+    Bell,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SoundChoice {
+    Off,
+    Music,
+    Bell,
+}
+
+impl SoundChoice {
+    pub const ALL: [Self; 3] = [Self::Off, Self::Music, Self::Bell];
+
+    pub fn resolve(self, current_mode: SoundMode) -> (bool, SoundMode) {
+        match self {
+            Self::Off => (false, current_mode),
+            Self::Music => (true, SoundMode::Music),
+            Self::Bell => (true, SoundMode::Bell),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(default)]
 pub struct SoundConfig {
     pub enabled: bool,
+    /// Sound strategy used when sound alerts are enabled.
+    pub mode: SoundMode,
     /// Optional mp3 file path used for all notification sounds.
     /// Relative paths are resolved from the config file's directory.
     pub path: Option<PathBuf>,
@@ -64,6 +93,17 @@ impl SoundConfig {
         !matches!(self.agents.for_agent(agent), AgentSoundSetting::Off)
     }
 
+    pub fn choice(&self) -> SoundChoice {
+        if !self.enabled {
+            return SoundChoice::Off;
+        }
+
+        match self.mode {
+            SoundMode::Music => SoundChoice::Music,
+            SoundMode::Bell => SoundChoice::Bell,
+        }
+    }
+
     pub fn path_for(&self, sound: crate::sound::Sound) -> Option<PathBuf> {
         let path = match sound {
             crate::sound::Sound::Done => self.done_path.as_ref().or(self.path.as_ref()),
@@ -74,6 +114,10 @@ impl SoundConfig {
     }
 
     pub fn diagnostics(&self) -> Vec<String> {
+        if self.mode == SoundMode::Bell {
+            return Vec::new();
+        }
+
         let mut diagnostics = Vec::new();
         for (field, path) in [
             ("ui.sound.path", self.path.as_ref()),
@@ -149,6 +193,7 @@ impl Default for SoundConfig {
     fn default() -> Self {
         Self {
             enabled: true,
+            mode: SoundMode::Music,
             path: None,
             done_path: None,
             request_path: None,
@@ -217,6 +262,50 @@ claude = "on"
         assert_eq!(config.ui.sound.agents.droid, AgentSoundSetting::Off);
         assert_eq!(config.ui.sound.agents.claude, AgentSoundSetting::On);
         assert_eq!(config.ui.sound.agents.pi, AgentSoundSetting::Default);
+    }
+
+    #[test]
+    fn sound_mode_defaults_to_music_for_existing_config() {
+        let config: Config = toml::from_str("[ui.sound]\nenabled = true\n").unwrap();
+
+        assert_eq!(config.ui.sound.mode, SoundMode::Music);
+        assert_eq!(config.ui.sound.choice(), SoundChoice::Music);
+    }
+
+    #[test]
+    fn sound_mode_parses_bell() {
+        let config: Config =
+            toml::from_str("[ui.sound]\nenabled = true\nmode = \"bell\"\n").unwrap();
+
+        assert_eq!(config.ui.sound.mode, SoundMode::Bell);
+        assert_eq!(config.ui.sound.choice(), SoundChoice::Bell);
+    }
+
+    #[test]
+    fn disabled_sound_projects_to_off_without_losing_mode() {
+        let config: Config =
+            toml::from_str("[ui.sound]\nenabled = false\nmode = \"bell\"\n").unwrap();
+
+        assert_eq!(config.ui.sound.choice(), SoundChoice::Off);
+        assert_eq!(
+            SoundChoice::Off.resolve(config.ui.sound.mode),
+            (false, SoundMode::Bell)
+        );
+    }
+
+    #[test]
+    fn bell_mode_ignores_inactive_music_path_diagnostics() {
+        let config: Config = toml::from_str(
+            r#"
+[ui.sound]
+enabled = true
+mode = "bell"
+path = "sounds/missing.mp3"
+"#,
+        )
+        .unwrap();
+
+        assert!(config.ui.sound.diagnostics().is_empty());
     }
 
     #[test]

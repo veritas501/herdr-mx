@@ -18,7 +18,7 @@ use crate::{
         },
         AppState,
     },
-    config::ToastDelivery,
+    config::{SoundChoice, ToastDelivery},
 };
 
 pub(crate) const SETTINGS_POPUP_WIDTH: u16 = 96;
@@ -111,14 +111,20 @@ pub(super) fn render_settings_overlay(app: &AppState, frame: &mut Frame, area: R
             render_settings_theme(app, frame, content_area);
         }
         SettingsSection::Sound => {
-            render_settings_toggle(
+            render_modal_choice_list(
                 frame,
                 content_area,
-                p,
                 "sound alerts",
-                "play sounds when agents change state in background",
-                app.sound_enabled(),
+                "choose music playback, the host terminal bell, or no sound alert",
+                &[
+                    ("off", SoundChoice::Off),
+                    ("music", SoundChoice::Music),
+                    ("bell", SoundChoice::Bell),
+                ],
+                app.sound_choice(),
                 app.settings.list.selected,
+                p,
+                1,
             );
         }
         SettingsSection::Toast => {

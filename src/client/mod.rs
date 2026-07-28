@@ -6615,9 +6615,7 @@ fn handle_notify_with_notifiers(
                 );
                 return;
             };
-            if sound_config.enabled {
-                crate::sound::play(sound, sound_config);
-            }
+            crate::sound::play(sound, sound_config);
         }
         NotifyKind::Toast => {
             debug!(

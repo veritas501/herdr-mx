@@ -373,16 +373,20 @@ Windows Terminal 支持要求使用包含 OSC 777 桌面通知功能的版本。
 
 ## 声音
 
-声音通知通过本地 Herdr 客户端播放。自定义声音必须是 mp3 文件；相对路径从配置文件所在目录解析。
+声音提醒由本地前台 Herdr 客户端执行。你可以选择播放音乐、使用外层终端的 Bell，或关闭声音提醒：
 
 ```toml
 [ui.sound]
+enabled = true
+mode = "music" # "music" 或 "bell"
 path = "sounds/notification.mp3"
 done_path = "sounds/done.mp3"
 request_path = "sounds/request.mp3"
 ```
 
-`path` 为所有声音通知设置同一种声音。`done_path` 和 `request_path` 只覆盖完成和需要输入时的声音。
+`enabled = false` 会关闭两种模式。`mode = "music"` 保留现有 mp3 行为：`path` 为所有通知设置同一种声音，`done_path` 和 `request_path` 分别覆盖完成和需要输入时的声音。自定义文件必须是 mp3；相对路径从配置文件所在目录解析。
+
+`mode = "bell"` 只写出一个终端 BEL，不启动音频播放器，也不使用 mp3 路径字段。外层终端决定 BEL 是发声、视觉闪烁、任务栏或 Dock 提示、tmux 提醒，还是直接忽略。应用内 Settings 页面提供相同的 Off、Music 和 Bell 三项选择。
 
 按智能体覆盖声音设置时，可使用 `default`、`on` 或 `off`。键应使用检测到的智能体标签，例如 `claude`、`codex`、`devin` 或 `droid`。Droid 默认静音。
 
@@ -449,7 +453,7 @@ switch_ascii_input_source_in_prefix = true
 | `HERDR_SESSION` | 为 CLI 命令选择命名会话。 |
 | `HERDR_SOCKET_PATH` | 覆盖底层 socket 路径。 |
 | `HERDR_LOG` | 设置日志过滤，例如 `HERDR_LOG=herdr=debug`。 |
-| `HERDR_DISABLE_SOUND` | 即使 `[ui.sound] enabled = true` 也禁用声音播放。 |
+| `HERDR_DISABLE_SOUND` | 即使 `[ui.sound] enabled = true`，也禁用 Music 和 Bell 声音提醒。 |
 
 ## 日志
 

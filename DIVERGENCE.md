@@ -23,6 +23,7 @@ upstream herdr attaches to one server at a time (`herdr --remote <host>` per ter
 - **client overlay framework** — unified drag-to-move client menus, keyboard navigation, drag-reorder with preview, collapsed status-only sidebar mode.
 - **clipboard image hardening (macOS)** — sandboxed/unreadable screenshot locations warn instead of silently failing; staged image paths paste un-bracketed so they attach; interactive panes spawn as login shells so `~/.zprofile` applies.
 - **Windows Terminal notifications** — `terminal` notification delivery detects the foreground client's Windows Terminal session and emits structured OSC 777 title/body notifications, retaining the existing tmux passthrough path for WSL2 workflows.
+- **terminal Bell sound mode** — sound alerts can be Off, Music, or Bell; Bell emits one host-terminal BEL from the foreground client without starting an audio player, preserving the existing per-agent sound gates.
 
 ## intentionally changed from upstream
 

@@ -2290,8 +2290,8 @@ impl AppState {
         changed
     }
 
-    pub fn sound_enabled(&self) -> bool {
-        self.sound.enabled
+    pub fn sound_choice(&self) -> crate::config::SoundChoice {
+        self.sound.choice()
     }
 
     pub fn toast_delivery(&self) -> ToastDelivery {

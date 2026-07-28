@@ -373,16 +373,20 @@ Windows Terminal は通知元のターミナルペインにフォーカスがあ
 
 ## サウンド
 
-サウンド通知はローカルの Herdr クライアントで再生されます。カスタムサウンドは mp3 ファイルでなければなりません。相対パスは設定ファイルのディレクトリから解決されます。
+サウンド通知はローカルのフォアグラウンド Herdr クライアントで実行されます。音楽再生、ホストターミナルの Bell、またはサウンド通知の無効化を選べます:
 
 ```toml
 [ui.sound]
+enabled = true
+mode = "music" # "music" または "bell"
 path = "sounds/notification.mp3"
 done_path = "sounds/done.mp3"
 request_path = "sounds/request.mp3"
 ```
 
-`path` はすべてのサウンド通知に 1 つの音を設定します。`done_path` と `request_path` は、完了音と入力要求音だけを上書きします。
+`enabled = false` は両方のモードを無効にします。`mode = "music"` は既存の mp3 動作を維持します。`path` はすべての通知に共通の音を設定し、`done_path` と `request_path` は完了時と入力要求時の音だけを上書きします。カスタムファイルは mp3 でなければならず、相対パスは設定ファイルのディレクトリから解決されます。
+
+`mode = "bell"` はターミナル BEL を 1 回だけ書き込み、オーディオプレーヤーを起動せず、mp3 パスも使用しません。BEL を音、視覚効果、タスクバーや Dock の表示、tmux のアラートとして扱うか、無視するかは外側のターミナルが決定します。アプリ内 Settings でも同じ Off、Music、Bell の選択肢を使用できます。
 
 エージェント別のサウンド上書きには `default`、`on`、`off` を指定できます。キーには `claude`、`codex`、`devin`、`droid` のような検出されたエージェントラベルを使います。Droid はデフォルトでミュートされています。
 
@@ -449,7 +453,7 @@ switch_ascii_input_source_in_prefix = true
 | `HERDR_SESSION` | CLI コマンドで名前付きセッションを選択する。 |
 | `HERDR_SOCKET_PATH` | 低レベルなソケットパスを上書きする。 |
 | `HERDR_LOG` | ログフィルタリングを設定する。例: `HERDR_LOG=herdr=debug`。 |
-| `HERDR_DISABLE_SOUND` | `[ui.sound] enabled = true` でも音の再生を無効にする。 |
+| `HERDR_DISABLE_SOUND` | `[ui.sound] enabled = true` の場合でも Music と Bell のサウンド通知を無効にする。 |
 
 ## ログ
 

@@ -36,13 +36,7 @@ pub enum Sound {
     Request,
 }
 
-/// Play a notification sound in a background thread.
-/// Silently does nothing if no audio player is available.
-pub fn play(sound: Sound, config: &crate::config::SoundConfig) {
-    if sound_playback_disabled_by_env() {
-        return;
-    }
-
+fn play_music(sound: Sound, config: &crate::config::SoundConfig) {
     let custom_path = config.path_for(sound);
     std::thread::spawn(move || {
         if let Some(path) = custom_path {
@@ -63,6 +57,33 @@ pub fn play(sound: Sound, config: &crate::config::SoundConfig) {
             warn!(sound = ?sound, err = %err, "sound playback failed");
         }
     });
+}
+
+fn dispatch_mode(
+    mode: crate::config::SoundMode,
+    emit_bell: impl FnOnce() -> std::io::Result<()>,
+    play_music: impl FnOnce(),
+) -> std::io::Result<()> {
+    match mode {
+        crate::config::SoundMode::Music => {
+            play_music();
+            Ok(())
+        }
+        crate::config::SoundMode::Bell => emit_bell(),
+    }
+}
+
+/// Deliver a configured notification sound strategy.
+pub fn play(sound: Sound, config: &crate::config::SoundConfig) {
+    if !config.enabled || sound_playback_disabled_by_env() {
+        return;
+    }
+
+    if let Err(err) = dispatch_mode(config.mode, crate::terminal_notify::emit_bell, || {
+        play_music(sound, config)
+    }) {
+        warn!(sound = ?sound, err = %err, "terminal bell failed");
+    }
 }
 
 fn sound_playback_disabled_by_env() -> bool {
@@ -335,6 +356,44 @@ mod tests {
     #[test]
     fn temp_sound_paths_are_unique() {
         assert_ne!(temp_sound_path(), temp_sound_path());
+    }
+
+    #[test]
+    fn bell_mode_emits_bell_without_starting_music() {
+        let mut bell_count = 0;
+        let mut music_count = 0;
+
+        dispatch_mode(
+            crate::config::SoundMode::Bell,
+            || {
+                bell_count += 1;
+                Ok(())
+            },
+            || music_count += 1,
+        )
+        .unwrap();
+
+        assert_eq!(bell_count, 1);
+        assert_eq!(music_count, 0);
+    }
+
+    #[test]
+    fn music_mode_starts_music_without_emitting_bell() {
+        let mut bell_count = 0;
+        let mut music_count = 0;
+
+        dispatch_mode(
+            crate::config::SoundMode::Music,
+            || {
+                bell_count += 1;
+                Ok(())
+            },
+            || music_count += 1,
+        )
+        .unwrap();
+
+        assert_eq!(bell_count, 0);
+        assert_eq!(music_count, 1);
     }
 
     #[cfg(not(any(windows, target_os = "macos")))]

@@ -11,7 +11,7 @@ use crate::{
         },
         App, Mode,
     },
-    config::ToastDelivery,
+    config::{SoundChoice, ToastDelivery},
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -19,7 +19,7 @@ use crate::{
 #[allow(clippy::enum_variant_names)]
 pub(super) enum SettingsAction {
     SaveTheme(String),
-    SaveSound(bool),
+    SaveSound(SoundChoice),
     SaveToastDelivery(ToastDelivery),
     SaveAgentBorderLabels(bool),
     SavePaneHistory(bool),
@@ -59,7 +59,7 @@ impl App {
         if let Some(action) = update_settings_state(&mut self.state, key) {
             match action {
                 SettingsAction::SaveTheme(name) => self.save_theme(&name),
-                SettingsAction::SaveSound(enabled) => self.save_sound(enabled),
+                SettingsAction::SaveSound(choice) => self.save_sound(choice),
                 SettingsAction::SaveToastDelivery(delivery) => self.save_toast_delivery(delivery),
                 SettingsAction::SaveAgentBorderLabels(enabled) => {
                     self.save_agent_border_labels(enabled)
@@ -135,6 +135,20 @@ fn toast_delivery_for_index(idx: usize) -> ToastDelivery {
         2 => ToastDelivery::Terminal,
         _ => ToastDelivery::System,
     }
+}
+
+fn sound_choice_index(choice: SoundChoice) -> usize {
+    SoundChoice::ALL
+        .iter()
+        .position(|candidate| *candidate == choice)
+        .unwrap_or(0)
+}
+
+fn sound_choice_for_index(index: usize) -> SoundChoice {
+    SoundChoice::ALL
+        .get(index)
+        .copied()
+        .unwrap_or(SoundChoice::Off)
 }
 
 /// item 2 (C3): the host group exposes a fixed option list (gradient/animation/speed/glyph/
@@ -580,7 +594,7 @@ pub(super) fn update_settings_state(state: &mut AppState, key: KeyEvent) -> Opti
             }
             KeyCode::Tab | KeyCode::Right | KeyCode::Char('l') => {
                 state.settings.section = SettingsSection::Sound;
-                state.settings.list.selected = usize::from(!state.sound_enabled());
+                state.settings.list.selected = sound_choice_index(state.sound_choice());
             }
             KeyCode::BackTab | KeyCode::Left | KeyCode::Char('h') => {
                 state.settings.section = SettingsSection::Experiments;
@@ -593,12 +607,12 @@ pub(super) fn update_settings_state(state: &mut AppState, key: KeyEvent) -> Opti
             },
         },
         SettingsSection::Sound => match key.code {
-            KeyCode::Up | KeyCode::Char('k') | KeyCode::Down | KeyCode::Char('j') => {
-                state.settings.list.selected = 1 - state.settings.list.selected.min(1);
-            }
+            KeyCode::Up | KeyCode::Char('k') => state.settings.list.move_prev(),
+            KeyCode::Down | KeyCode::Char('j') => state.settings.list.move_next(3),
             KeyCode::Enter | KeyCode::Char(' ') => {
-                let enabled = state.settings.list.selected == 0;
-                return Some(SettingsAction::SaveSound(enabled));
+                return Some(SettingsAction::SaveSound(sound_choice_for_index(
+                    state.settings.list.selected,
+                )));
             }
             KeyCode::Tab | KeyCode::Right | KeyCode::Char('l') => {
                 state.settings.section = SettingsSection::Toast;
@@ -625,7 +639,7 @@ pub(super) fn update_settings_state(state: &mut AppState, key: KeyEvent) -> Opti
             }
             KeyCode::BackTab | KeyCode::Left | KeyCode::Char('h') => {
                 state.settings.section = SettingsSection::Sound;
-                state.settings.list.selected = usize::from(!state.sound_enabled());
+                state.settings.list.selected = sound_choice_index(state.sound_choice());
             }
             KeyCode::Tab | KeyCode::Right | KeyCode::Char('l') => {
                 state.settings.section = SettingsSection::PaneLabels;
@@ -823,7 +837,7 @@ pub(crate) fn open_settings_at(state: &mut AppState, section: SettingsSection) {
     state.settings.section = section;
     state.settings.list.selected = match section {
         SettingsSection::Theme => current_theme_index(&state.theme_name),
-        SettingsSection::Sound => usize::from(!state.sound_enabled()),
+        SettingsSection::Sound => sound_choice_index(state.sound_choice()),
         SettingsSection::Toast => toast_delivery_index(state.toast_delivery()),
         SettingsSection::PaneLabels => usize::from(!state.agent_border_labels_enabled()),
         SettingsSection::Sidebar => {
@@ -904,7 +918,7 @@ impl AppState {
             }
             SettingsSection::Sound => {
                 let list_y = area.y + 3;
-                if row >= list_y && row < list_y + 2 {
+                if row >= list_y && row < list_y + 3 {
                     Some((row - list_y) as usize)
                 } else {
                     None
@@ -952,7 +966,7 @@ impl AppState {
                     self.settings.section = section;
                     self.settings.list.select(match section {
                         SettingsSection::Theme => current_theme_index(&self.theme_name),
-                        SettingsSection::Sound => usize::from(!self.sound_enabled()),
+                        SettingsSection::Sound => sound_choice_index(self.sound_choice()),
                         SettingsSection::Toast => toast_delivery_index(self.toast_delivery()),
                         SettingsSection::PaneLabels => {
                             usize::from(!self.agent_border_labels_enabled())
@@ -975,8 +989,7 @@ impl AppState {
                             None
                         }
                         SettingsSection::Sound => {
-                            let enabled = idx == 0;
-                            Some(SettingsAction::SaveSound(enabled))
+                            Some(SettingsAction::SaveSound(sound_choice_for_index(idx)))
                         }
                         SettingsSection::Toast => {
                             let delivery = toast_delivery_for_index(idx);
@@ -1061,20 +1074,47 @@ mod tests {
     }
 
     #[test]
-    fn settings_sound_toggle_returns_save_action() {
+    fn settings_sound_choice_returns_bell_save_action() {
         let mut state = state_with_workspaces(&["test"]);
-        open_settings(&mut state);
-        state.settings.section = crate::app::state::SettingsSection::Sound;
-        state.settings.list.selected = 0;
+        open_settings_at(&mut state, SettingsSection::Sound);
+        state.settings.list.selected = 2;
 
         let action = update_settings_state(
             &mut state,
             KeyEvent::new(KeyCode::Enter, KeyModifiers::empty()),
         );
 
-        assert_eq!(action, Some(SettingsAction::SaveSound(true)));
-        assert!(!state.sound.enabled);
+        assert_eq!(action, Some(SettingsAction::SaveSound(SoundChoice::Bell)));
         assert_eq!(state.mode, Mode::Settings);
+    }
+
+    #[test]
+    fn settings_sound_choice_initializes_from_effective_mode() {
+        let mut state = state_with_workspaces(&["test"]);
+        state.sound.enabled = true;
+        state.sound.mode = crate::config::SoundMode::Bell;
+
+        open_settings_at(&mut state, SettingsSection::Sound);
+
+        assert_eq!(state.settings.list.selected, 2);
+    }
+
+    #[test]
+    fn settings_sound_choice_cycles_all_three_rows() {
+        let mut state = state_with_workspaces(&["test"]);
+        open_settings_at(&mut state, SettingsSection::Sound);
+        state.settings.list.selected = 0;
+
+        update_settings_state(
+            &mut state,
+            KeyEvent::new(KeyCode::Down, KeyModifiers::empty()),
+        );
+        update_settings_state(
+            &mut state,
+            KeyEvent::new(KeyCode::Down, KeyModifiers::empty()),
+        );
+
+        assert_eq!(state.settings.list.selected, 2);
     }
 
     #[test]
@@ -1644,6 +1684,22 @@ mod tests {
 
         assert_eq!(action, Some(SettingsAction::SavePaneHistory(true)));
         assert_eq!(app.state.settings.list.selected, 0);
+    }
+
+    #[test]
+    fn settings_sound_choice_mouse_returns_bell_save_action() {
+        let mut app = app_for_mouse_test();
+        open_settings_at(&mut app.state, SettingsSection::Sound);
+
+        let area = app.state.settings_content_rect();
+        let action = app.state.handle_settings_mouse(mouse(
+            MouseEventKind::Down(crossterm::event::MouseButton::Left),
+            area.x + 2,
+            area.y + 5,
+        ));
+
+        assert_eq!(action, Some(SettingsAction::SaveSound(SoundChoice::Bell)));
+        assert_eq!(app.state.settings.list.selected, 2);
     }
 
     #[test]

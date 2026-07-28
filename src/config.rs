@@ -26,7 +26,7 @@ pub use self::{
         ToastClipboardPosition, ToastConfig, ToastDelivery, ToastHerdrPosition,
         UpdateChannelConfig, MAX_TOAST_DELAY_SECONDS,
     },
-    sound::SoundConfig,
+    sound::{SoundChoice, SoundConfig, SoundMode},
     theme::{parse_color, CustomThemeColors, ThemeConfig},
 };
 

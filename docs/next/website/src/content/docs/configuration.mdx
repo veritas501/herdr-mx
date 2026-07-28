@@ -377,16 +377,20 @@ Windows Terminal suppresses a notification while its originating terminal pane i
 
 ## Sound
 
-Sound notifications play through the local Herdr client. Custom sounds must be mp3 files; relative paths are resolved from the config file's directory.
+Sound alerts are delivered by the local foreground Herdr client. Choose music playback, the host terminal bell, or disable sound alerts:
 
 ```toml
 [ui.sound]
+enabled = true
+mode = "music" # "music" or "bell"
 path = "sounds/notification.mp3"
 done_path = "sounds/done.mp3"
 request_path = "sounds/request.mp3"
 ```
 
-`path` sets one sound for all sound notifications. `done_path` and `request_path` override only the finished and needs-input sounds.
+`enabled = false` disables both modes. `mode = "music"` preserves the existing mp3 behavior: `path` sets one sound for all notifications, while `done_path` and `request_path` override finished and needs-input sounds. Custom files must be mp3 files, and relative paths are resolved from the config file's directory.
+
+`mode = "bell"` writes one terminal BEL and does not start an audio player or use the mp3 path fields. The outer terminal decides whether BEL is audible, visual, a taskbar or Dock indication, a tmux alert, or ignored. The in-app Settings screen exposes the same Off, Music, and Bell choices.
 
 Per-agent sound overrides accept `default`, `on`, or `off`. Use detected agent labels such as `claude`, `codex`, `devin`, or `droid` as keys. Droid is muted by default.
 
@@ -453,7 +457,7 @@ Herdr restores the previous input source when returning to terminal input or ent
 | `HERDR_SESSION` | Select a named session for CLI commands. |
 | `HERDR_SOCKET_PATH` | Low-level socket path override. |
 | `HERDR_LOG` | Set log filtering, for example `HERDR_LOG=herdr=debug`. |
-| `HERDR_DISABLE_SOUND` | Disable sound playback even when `[ui.sound] enabled = true`. |
+| `HERDR_DISABLE_SOUND` | Disable Music and Bell sound alerts even when `[ui.sound] enabled = true`. |
 
 ## Logs
 
