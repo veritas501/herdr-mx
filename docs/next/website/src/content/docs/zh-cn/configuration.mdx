@@ -367,6 +367,10 @@ position = "bottom-right"
 
 选择 `herdr` 可使用应用内 toast，选择 `terminal` 可使用适合 SSH 场景的外层终端通知，选择 `system` 可使用本地操作系统通知服务，选择 `off` 可禁用弹出通知。Herdr 会抑制活动标签页的弹出通知。在[配置参考](/docs/config-reference/)中搜索 `ui.toast`，可查看位置、延迟行为和剪贴板反馈设置。
 
+Windows Terminal 支持要求使用包含 OSC 777 桌面通知功能的版本。在该功能进入常规发行版之前，请使用 Windows Terminal Canary。在启动 Herdr 或 WSL2 的 Windows Terminal 配置文件中启用 **允许 OSC 777 (Desktop Notification) 显示 toast 通知**；该设置默认关闭。
+
+当通知来源终端窗格处于焦点时，Windows Terminal 会抑制通知，并应用自身的通知限流。因此测试时应延迟触发通知，并在通知发出前切换到其他窗口。如果 Herdr 本身运行在 tmux 中，请启用 `set -g allow-passthrough on`；只有在包含 Herdr 的 tmux 窗格隐藏时仍需通知，才使用 `all` 代替 `on`。终端投递是尽力而为，Herdr 无法确认 Windows 是否实际显示了 toast。
+
 ## 声音
 
 声音通知通过本地 Herdr 客户端播放。自定义声音必须是 mp3 文件；相对路径从配置文件所在目录解析。

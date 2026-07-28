@@ -22,6 +22,7 @@ upstream herdr attaches to one server at a time (`herdr --remote <host>` per ter
 - **fleet-scale rendering** — model updates coalesced to one render per frame, cached sidebar shell, hover painted as a per-frame overlay; the client stays smooth with many remotes attached (upstream's single-remote client never hits these paths).
 - **client overlay framework** — unified drag-to-move client menus, keyboard navigation, drag-reorder with preview, collapsed status-only sidebar mode.
 - **clipboard image hardening (macOS)** — sandboxed/unreadable screenshot locations warn instead of silently failing; staged image paths paste un-bracketed so they attach; interactive panes spawn as login shells so `~/.zprofile` applies.
+- **Windows Terminal notifications** — `terminal` notification delivery detects the foreground client's Windows Terminal session and emits structured OSC 777 title/body notifications, retaining the existing tmux passthrough path for WSL2 workflows.
 
 ## intentionally changed from upstream
 

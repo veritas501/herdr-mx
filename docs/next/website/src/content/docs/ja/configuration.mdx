@@ -367,6 +367,10 @@ position = "bottom-right"
 
 アプリ内トーストには `herdr`、SSH 越しでも使いやすい外側のターミナル通知には `terminal`、ローカル OS の通知サービスには `system`、ポップアップを無効にするには `off` を選びます。Herdr はアクティブなタブのポップアップを抑制します。位置、遅延の挙動、クリップボードのフィードバック設定については、[設定リファレンス](/docs/config-reference/)で `ui.toast` を検索してください。
 
+Windows Terminal での通知には、OSC 777 デスクトップ通知を含むビルドが必要です。この機能が通常リリースに入るまでは Windows Terminal Canary を使用してください。Herdr または WSL2 を起動する Windows Terminal プロファイルで、**Allow OSC 777 (Desktop Notification) to show toast notifications** を有効にします。この設定はデフォルトで無効です。
+
+Windows Terminal は通知元のターミナルペインにフォーカスがある間は通知を抑制し、独自の通知レート制限も適用します。テストでは通知を遅延実行し、発火前に別のウィンドウへ切り替えてください。Herdr 自体を tmux 内で実行する場合は `set -g allow-passthrough on` を有効にします。Herdr を含む tmux ペインが非表示でも通知する必要がある場合に限り、`on` の代わりに `all` を使用してください。ターミナル通知はベストエフォートであり、Windows が実際にトーストを表示したかどうかを Herdr は確認できません。
+
 ## サウンド
 
 サウンド通知はローカルの Herdr クライアントで再生されます。カスタムサウンドは mp3 ファイルでなければなりません。相対パスは設定ファイルのディレクトリから解決されます。

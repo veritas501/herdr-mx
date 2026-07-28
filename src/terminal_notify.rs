@@ -6,29 +6,46 @@ pub enum TerminalNotificationBackend {
     Iterm2,
     Kitty,
     WezTerm,
+    WindowsTerminal,
 }
 
 pub fn detect_backend() -> Option<TerminalNotificationBackend> {
     let term_program = std::env::var("TERM_PROGRAM").ok();
     let term = std::env::var("TERM").ok();
 
-    match term_program.as_deref() {
+    detect_backend_from_env(
+        term_program.as_deref(),
+        term.as_deref(),
+        std::env::var_os("KITTY_WINDOW_ID").is_some(),
+        std::env::var_os("WT_SESSION").is_some(),
+    )
+}
+
+fn detect_backend_from_env(
+    term_program: Option<&str>,
+    term: Option<&str>,
+    kitty_window_id: bool,
+    wt_session: bool,
+) -> Option<TerminalNotificationBackend> {
+    match term_program {
         Some("ghostty") => return Some(TerminalNotificationBackend::Ghostty),
         Some("iTerm.app") => return Some(TerminalNotificationBackend::Iterm2),
         Some("WezTerm") => return Some(TerminalNotificationBackend::WezTerm),
         _ => {}
     }
 
-    if std::env::var_os("KITTY_WINDOW_ID").is_some() {
+    if kitty_window_id {
         return Some(TerminalNotificationBackend::Kitty);
     }
 
-    match term.as_deref() {
+    let backend = match term {
         Some("xterm-ghostty") => Some(TerminalNotificationBackend::Ghostty),
         Some("xterm-kitty") => Some(TerminalNotificationBackend::Kitty),
         Some(term) if term.contains("wezterm") => Some(TerminalNotificationBackend::WezTerm),
         _ => None,
-    }
+    };
+
+    backend.or_else(|| wt_session.then_some(TerminalNotificationBackend::WindowsTerminal))
 }
 
 pub fn show_notification(title: &str, body: Option<&str>) -> io::Result<bool> {
@@ -41,6 +58,7 @@ pub fn show_notification(title: &str, body: Option<&str>) -> io::Result<bool> {
         | TerminalNotificationBackend::Iterm2
         | TerminalNotificationBackend::WezTerm => build_osc9_notification(title, body),
         TerminalNotificationBackend::Kitty => build_osc99_notification(title, body),
+        TerminalNotificationBackend::WindowsTerminal => build_osc777_notification(title, body),
     };
 
     let sequence = if std::env::var_os("TMUX").is_some() {
@@ -79,6 +97,18 @@ fn build_osc99_notification(title: &str, body: Option<&str>) -> Vec<u8> {
         }
         _ => format!("\x1b]99;;{title}\x1b\\").into_bytes(),
     }
+}
+
+fn build_osc777_notification(title: &str, body: Option<&str>) -> Vec<u8> {
+    let title = sanitize_text(title);
+    let body = body.map(sanitize_text).filter(|body| !body.is_empty());
+
+    let (title, body) = match body {
+        Some(body) => (title.replace(';', ":"), body),
+        None => ("Herdr".to_string(), title),
+    };
+
+    format!("\x1b]777;notify;{title};{body}\x1b\\").into_bytes()
 }
 
 fn sanitize_text(text: impl AsRef<str>) -> String {
@@ -139,5 +169,61 @@ mod tests {
     fn tmux_passthrough_wraps_and_escapes() {
         let wrapped = wrap_tmux_passthrough(b"\x1b]9;hi\x1b\\");
         assert_eq!(wrapped, b"\x1bPtmux;\x1b\x1b]9;hi\x1b\x1b\\\x1b\\");
+    }
+
+    #[test]
+    fn windows_terminal_is_detected_from_wt_session() {
+        assert_eq!(
+            detect_backend_from_env(None, Some("xterm-256color"), false, true),
+            Some(TerminalNotificationBackend::WindowsTerminal)
+        );
+    }
+
+    #[test]
+    fn explicit_backend_wins_over_inherited_wt_session() {
+        assert_eq!(
+            detect_backend_from_env(Some("WezTerm"), Some("xterm-256color"), false, true),
+            Some(TerminalNotificationBackend::WezTerm)
+        );
+        assert_eq!(
+            detect_backend_from_env(None, Some("xterm-kitty"), false, true),
+            Some(TerminalNotificationBackend::Kitty)
+        );
+    }
+
+    #[test]
+    fn windows_terminal_notification_uses_structured_title_and_body() {
+        assert_eq!(
+            build_osc777_notification("pi finished", Some("workspace 1")),
+            b"\x1b]777;notify;pi finished;workspace 1\x1b\\"
+        );
+    }
+
+    #[test]
+    fn windows_terminal_title_only_notification_uses_herdr_title() {
+        assert_eq!(
+            build_osc777_notification("pi finished", None),
+            b"\x1b]777;notify;Herdr;pi finished\x1b\\"
+        );
+        assert_eq!(
+            build_osc777_notification("pi finished", Some("")),
+            b"\x1b]777;notify;Herdr;pi finished\x1b\\"
+        );
+    }
+
+    #[test]
+    fn windows_terminal_notification_protects_title_delimiter() {
+        assert_eq!(
+            build_osc777_notification("build;failed", Some("workspace;one")),
+            b"\x1b]777;notify;build:failed;workspace;one\x1b\\"
+        );
+    }
+
+    #[test]
+    fn windows_terminal_notification_strips_control_terminators() {
+        assert_eq!(
+            build_osc777_notification("build\u{1b}]9;pwn\u{7}", Some("line\nnext\u{9c}")),
+            b"\x1b]777;notify;build]9:pwn;line next\x1b\\"
+        );
     }
 }

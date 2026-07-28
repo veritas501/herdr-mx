@@ -371,6 +371,10 @@ position = "bottom-right"
 
 Choose `herdr` for an in-app toast, `terminal` for an outer-terminal notification that works well over SSH, `system` for the local OS notification service, or `off` to disable popups. Herdr suppresses popups for the active tab. Search `ui.toast` in the [Config reference](/docs/config-reference/) for positions, delay behavior, and clipboard feedback settings.
 
+Windows Terminal support requires a build that includes OSC 777 desktop notifications. Use Windows Terminal Canary until that support reaches a regular release. In the Windows Terminal profile that launches Herdr or WSL2, enable **Allow OSC 777 (Desktop Notification) to show toast notifications**; the setting is disabled by default.
+
+Windows Terminal suppresses a notification while its originating terminal pane is focused and applies its own notification rate limit, so test by scheduling a notification and switching to another window before it fires. If Herdr itself runs inside tmux, enable `set -g allow-passthrough on`; use `all` instead of `on` only when the tmux pane containing Herdr must notify while hidden. Terminal delivery is best-effort and cannot confirm that Windows displayed the toast.
+
 ## Sound
 
 Sound notifications play through the local Herdr client. Custom sounds must be mp3 files; relative paths are resolved from the config file's directory.
