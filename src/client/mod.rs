@@ -429,11 +429,10 @@ enum ClientInputDispatch {
     DetachAll,
     Redraw,
     /// #48: a sidebar hover changed the highlighted row — a presentation-only change of a couple of
-    /// cells, NOT a model/view mutation. Distinguished from [`Redraw`] so the main loop takes the
-    /// lightweight `request_hover_redraw` path (rebuild the shell so the new highlight is painted by
-    /// the one render source of truth, but PRESERVE the blit-encoder diff baseline so only the ~2
-    /// changed rows are written — never a full-screen repaint) instead of the `request_full_redraw`
-    /// sledgehammer a genuine model change needs.
+    /// cells, NOT a model/view mutation. Distinguished from [`Redraw`] so the main loop keeps the
+    /// cached hover-less shell as well as the blit-encoder diff baseline. A normal [`Redraw`] must
+    /// rebuild the shell for model/view changes, but it also preserves the terminal baseline so
+    /// neither path triggers a full-screen clear.
     HoverRedraw,
     Consumed,
 }
@@ -1938,16 +1937,22 @@ fn translate_content_mouse_input(
 }
 
 impl ClientState {
+    /// Rebuild the composited shell after a model/view change while preserving the terminal's
+    /// semantic-frame baseline. The next encode can then diff the fresh composite against what is
+    /// already visible instead of clearing and repainting the whole host terminal.
     fn request_full_redraw(&mut self) {
-        self.blit_encoder = render_ansi::BlitEncoder::new();
-        // #45: a full repaint is requested precisely when the sidebar model/view changed too (every
-        // such event handler calls this). Drop the cached shell so the next compose rebuilds it —
-        // otherwise a reused content frame would paint a stale sidebar over fresh model state.
         self.shell_cache = None;
         #[cfg(windows)]
         {
             self.pending_cursor_reveal = None;
         }
+    }
+
+    /// Forget the host-terminal baseline only when an external event may have invalidated the
+    /// visible surface (for example Ctrl-L or a terminal focus restoration request).
+    fn request_terminal_redraw(&mut self) {
+        self.blit_encoder = render_ansi::BlitEncoder::new();
+        self.request_full_redraw();
     }
 
     /// #56: the lightweight redraw for a HOVER / open-menu-selection change (a presentation-only
@@ -5127,7 +5132,7 @@ async fn run_client_loop(
                         &events,
                         state.redraw_on_focus_gained,
                     ) {
-                        state.request_full_redraw();
+                        state.request_terminal_redraw();
                     }
                     if let (Some(compositor), Some(model)) =
                         (&mut state.compositor, &mut state.supervisor_model)
@@ -5449,7 +5454,7 @@ async fn run_client_loop(
                     &raw_events,
                     state.redraw_on_focus_gained,
                 ) {
-                    state.request_full_redraw();
+                    state.request_terminal_redraw();
                 }
                 let msg = ClientMessage::InputEvents { events };
                 if let Err(e) = write_to_server(&mut write_stream, &msg) {
@@ -7194,18 +7199,32 @@ mod tests {
         );
     }
 
-    /// Counterpart locking the contrast: a genuine model change (`request_full_redraw`) DOES reset
-    /// the blit baseline, so the following frame is a full repaint. This is what a hover must NOT do.
+    /// Model/view changes rebuild the shell but preserve the terminal baseline. Idle supervisor
+    /// summaries and ping updates therefore produce a diff instead of a periodic `CSI 2J` clear.
     #[test]
-    fn request_full_redraw_resets_blit_baseline() {
+    fn request_full_redraw_preserves_blit_baseline() {
         let model = supervisor::ClientSupervisorModel::new("local");
         let mut state = test_client_state_with_model(model);
 
         let next_is_full = next_encode_is_full_after(&mut state, |s| s.request_full_redraw());
 
         assert!(
+            !next_is_full,
+            "model redraw must preserve the blit baseline so idle refreshes cannot clear the screen"
+        );
+    }
+
+    /// A real host-surface invalidation still forces a full repaint on the following frame.
+    #[test]
+    fn request_terminal_redraw_resets_blit_baseline() {
+        let model = supervisor::ClientSupervisorModel::new("local");
+        let mut state = test_client_state_with_model(model);
+
+        let next_is_full = next_encode_is_full_after(&mut state, |s| s.request_terminal_redraw());
+
+        assert!(
             next_is_full,
-            "request_full_redraw must reset the blit baseline so the next frame is a full repaint"
+            "terminal redraw must reset the blit baseline after the visible surface was invalidated"
         );
     }
 

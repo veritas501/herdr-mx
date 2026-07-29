@@ -1535,10 +1535,17 @@ fn mixed_client_clicking_remote_workspace_focuses_and_displays_remote_content() 
         "mixed client should render main content and both workspace labels before clicking"
     );
 
+    // The collector strips ANSI but does not emulate cursor-addressed diff updates. Once the main
+    // frame is the encoder baseline, the unchanged PID suffix is intentionally not emitted again;
+    // the remote-only prefix is the observable content transition in the PTY byte stream.
     let mut displayed_remote = false;
     for sgr_row in 2..=11 {
         write_sgr_mouse_click(client_writer.as_mut(), 2, sgr_row);
-        if wait_for_output_containing(&client_output, &[&dev_marker], Duration::from_millis(400)) {
+        if wait_for_output_containing(
+            &client_output,
+            &["REMOTE_CLICK_CONTENT"],
+            Duration::from_millis(400),
+        ) {
             displayed_remote = true;
             break;
         }
