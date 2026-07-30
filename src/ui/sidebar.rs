@@ -611,10 +611,10 @@ fn style_with_sidebar_color(
     }
 }
 
-// item 2 (C3): lolcat-style per-character RGB gradient for the host banner name. Pure: the
+// item 2 (C3): per-character RGB gradient for the host banner name. Pure: the
 // only animation input is `tick` (fed from the C1 client animation tick via `app.spinner_tick`;
-// a frozen `tick == 0` yields a fixed-but-correct spatial rainbow). A luma floor keeps every
-// character legible on the dark sidebar; speed `0.0` freezes the snapshot (Static mode).
+// a frozen `tick == 0` yields a fixed spatial gradient). A luma floor keeps every character
+// legible on the dark sidebar; speed `0.0` freezes the snapshot (Static mode).
 const HOST_BANNER_MIN_LUMA: f32 = 0.45;
 const HOST_BANNER_MAX_LUMA: f32 = 1.00;
 const HOST_BANNER_FREQ: f32 = 0.30;
@@ -1953,7 +1953,7 @@ fn render_workspace_list(
     // item 2 (C3): draw each host banner at its rect from `app.view.host_banner_areas` (the
     // SAME single `compute_workspace_list_areas_full` pass that produced the card geometry, so
     // render never recomputes a banner y — render == hit_test). Content left→right: optional
-    // connection glyph, the per-char lolcat gradient host name (bold), an optional dim suffix.
+    // connection glyph, the per-character styled host name (bold), an optional dim suffix.
     for banner_area in app.view.host_banner_areas.iter() {
         let row_y = banner_area.rect.y;
         if row_y >= list_bottom {
@@ -1999,7 +1999,7 @@ fn render_workspace_list(
         ) {
             spans.push(Span::styled(suffix, Style::default().fg(p.overlay0)));
         }
-        // Left side (glyph + rainbow name + suffix): its display width gates whether the metric fits.
+        // Left side (glyph + styled name + suffix): its display width gates whether the metric fits.
         let name_width: usize = spans
             .iter()
             .map(|span| UnicodeWidthStr::width(span.content.as_ref()))
@@ -2486,8 +2486,8 @@ fn render_agent_line(
 }
 
 /// item 2 (C3): a labeled live demo banner for the host-settings panel — the same glyph +
-/// per-char lolcat gradient name + optional suffix the real banner renders, so changing a
-/// setting (immediate-save) updates the demo. Uses a fixed `"demo"` host name.
+/// per-character styled name + optional suffix the real banner renders, so changing a setting
+/// (immediate-save) updates the demo. Uses a fixed `"demo"` host name.
 pub(crate) fn settings_sidebar_host_demo_line(app: &AppState) -> Line<'static> {
     let p = &app.palette;
     let spec_state = crate::app::state::HostBannerState::Connected;
@@ -5415,6 +5415,30 @@ lines = [
             colors(&anim_0),
             colors(&anim_n),
             "animated advances with tick"
+        );
+    }
+
+    #[test]
+    fn host_banner_default_uses_accent_not_rainbow() {
+        let p = Palette::catppuccin();
+        let cfg = crate::config::SidebarHostConfig::default();
+        let spans = host_banner_spans("demo", 0, &cfg, &p);
+        let rendered = spans.iter().map(|span| span.style.fg).collect::<Vec<_>>();
+        let rainbow = (0..spans.len())
+            .map(|idx| {
+                let (r, g, b) = host_banner_rgb(0, idx, HOST_BANNER_FREQ, 0.0);
+                Some(Color::Rgb(r, g, b))
+            })
+            .collect::<Vec<_>>();
+
+        assert_eq!(cfg.gradient, crate::config::HostBannerGradient::Accent);
+        assert_ne!(
+            rendered, rainbow,
+            "default banner must not use the rainbow sweep"
+        );
+        assert_eq!(
+            host_banner_base_color(cfg.gradient, &p),
+            Some(p.sidebar_color(SidebarColorPreset::Accent, p.text))
         );
     }
 

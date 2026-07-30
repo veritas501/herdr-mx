@@ -872,7 +872,7 @@ pub struct SidebarHostConfig {
 impl Default for SidebarHostConfig {
     fn default() -> Self {
         Self {
-            gradient: HostBannerGradient::Rainbow,
+            gradient: HostBannerGradient::Accent,
             animation: HostBannerAnimation::Static,
             speed: HostBannerSpeed::Calm,
             glyph: HostBannerGlyph::Left,
@@ -894,11 +894,10 @@ pub enum HostBannerGradient {
 impl HostBannerGradient {
     pub fn next(self) -> Self {
         match self {
-            Self::Rainbow => Self::Accent,
-            Self::Accent => Self::Cool,
+            Self::Rainbow | Self::Accent => Self::Cool,
             Self::Cool => Self::Warm,
             Self::Warm => Self::Muted,
-            Self::Muted => Self::Rainbow,
+            Self::Muted => Self::Accent,
         }
     }
 
@@ -961,7 +960,7 @@ impl HostBannerSpeed {
         }
     }
 
-    /// Per-tick phase drift used by the lolcat gradient animation. `Calm < Normal < Lively`.
+    /// Per-tick phase drift used by host-name gradient animation. `Calm < Normal < Lively`.
     pub fn drift(self) -> f32 {
         match self {
             Self::Calm => 0.04,
@@ -1029,7 +1028,8 @@ fn parse_host_gradient(value: Option<&str>) -> HostBannerGradient {
         Some("cool") => HostBannerGradient::Cool,
         Some("warm") => HostBannerGradient::Warm,
         Some("muted") => HostBannerGradient::Muted,
-        _ => HostBannerGradient::Rainbow,
+        Some("rainbow") => HostBannerGradient::Rainbow,
+        _ => HostBannerGradient::Accent,
     }
 }
 
@@ -2588,7 +2588,7 @@ scrollback_lines = 12345
     #[test]
     fn sidebar_host_config_default() {
         let host = SidebarHostConfig::default();
-        assert_eq!(host.gradient, HostBannerGradient::Rainbow);
+        assert_eq!(host.gradient, HostBannerGradient::Accent);
         assert_eq!(host.animation, HostBannerAnimation::Static);
         assert_eq!(host.speed, HostBannerSpeed::Calm);
         assert_eq!(host.glyph, HostBannerGlyph::Left);
@@ -2607,7 +2607,7 @@ glyph = "none"
         let config: Config = toml::from_str(toml).unwrap();
         assert_eq!(config.ui.sidebar.host.glyph, HostBannerGlyph::None);
         // The other four keep their defaults.
-        assert_eq!(config.ui.sidebar.host.gradient, HostBannerGradient::Rainbow);
+        assert_eq!(config.ui.sidebar.host.gradient, HostBannerGradient::Accent);
         assert_eq!(
             config.ui.sidebar.host.animation,
             HostBannerAnimation::Static
@@ -2628,7 +2628,7 @@ speed = "warp"
 glyph = "right"
 "#;
         let config: Config = toml::from_str(toml).unwrap();
-        assert_eq!(config.ui.sidebar.host.gradient, HostBannerGradient::Rainbow);
+        assert_eq!(config.ui.sidebar.host.gradient, HostBannerGradient::Accent);
         assert_eq!(
             config.ui.sidebar.host.animation,
             HostBannerAnimation::Static
@@ -2678,15 +2678,12 @@ show = false
     }
 
     #[test]
-    fn host_banner_enums_cycle_through_all_variants() {
-        assert_eq!(
-            HostBannerGradient::Rainbow.next(),
-            HostBannerGradient::Accent
-        );
-        assert_eq!(
-            HostBannerGradient::Muted.next(),
-            HostBannerGradient::Rainbow
-        );
+    fn host_banner_enums_cycle_through_standard_variants() {
+        assert_eq!(HostBannerGradient::Rainbow.next(), HostBannerGradient::Cool);
+        assert_eq!(HostBannerGradient::Accent.next(), HostBannerGradient::Cool);
+        assert_eq!(HostBannerGradient::Cool.next(), HostBannerGradient::Warm);
+        assert_eq!(HostBannerGradient::Warm.next(), HostBannerGradient::Muted);
+        assert_eq!(HostBannerGradient::Muted.next(), HostBannerGradient::Accent);
         assert_eq!(
             HostBannerAnimation::Animated.next(),
             HostBannerAnimation::Static

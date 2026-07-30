@@ -800,7 +800,7 @@ mod tests {
 
         assert!(rendered.contains("host - sidebar config"));
         assert!(rendered.contains("gradient"));
-        assert!(rendered.contains("rainbow"));
+        assert!(rendered.contains("accent"));
         assert!(rendered.contains("animation"));
         assert!(rendered.contains("static"));
         assert!(rendered.contains("speed"));

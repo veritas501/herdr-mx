@@ -6,7 +6,7 @@
 - Added mixed remote headless server support: the thin client can manage secondary local or SSH-backed Herdr servers from the sidebar, persist the remote registry on the main server, show combined workspace and agent summaries, route workspace creation/focus to the selected server, and keep secondary disconnects isolated from the main session.
 
 ### Changed
-- Host names in the Spaces sidebar now use a static rainbow gradient by default instead of continuously scrolling; set `ui.sidebar.host.animation = "animated"` to opt back in.
+- Host names in the Spaces sidebar now use a static single-color accent gradient by default instead of a multi-color rainbow sweep; set `ui.sidebar.host.gradient = "rainbow"` to opt back in, and `ui.sidebar.host.animation = "animated"` to animate it.
 
 ### Fixed
 - Fixed mixed remote client sidebar wheel scrolling so overflowed remote spaces can be reached and clicked.
