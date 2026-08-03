@@ -15,6 +15,7 @@
 - Fixed Agents sidebar clicks on remote panes by routing `agent.focus` with the public pane ID instead of the server-private terminal ID.
 - Fixed modified Enter keys such as Ctrl+Enter reaching Kitty-aware pane applications as plain Enter by synchronizing the focused pane's report-all keyboard mode with the foreground client terminal.
 - Fixed the mixed remote client periodically clearing the whole terminal while idle by preserving the ANSI diff baseline across supervisor summary and latency refreshes.
+- Fixed the mixed remote client so pressing the detach keybind (default `prefix+q`) while focused on a remote host exits herdr entirely in one press, instead of only dropping the remote link and requiring a second press to quit.
 
 ## [0.7.5] - 2026-07-21
 

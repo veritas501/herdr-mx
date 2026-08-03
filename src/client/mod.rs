@@ -823,6 +823,17 @@ fn sidebar_action_dispatch(
         ActionTrigger::Prefix => binding.matches_prefix_key(key),
     };
 
+    // detach (prefix+q): when the ACTIVE server is a REMOTE, exit herdr entirely in ONE press.
+    // Forwarding the raw prefix+q to the active remote would only drop that link (its
+    // `ServerShutdown` handler removes the host but keeps the client running), forcing a second
+    // prefix+q to actually exit herdr. Dispatch the same `DetachAll` the client menu "detach"
+    // action uses: send `ClientMessage::Detach` to every connected server and exit the client
+    // loop. When the active server is main, keep forwarding so the main server's own detach flow
+    // (with its reattach hint) runs unchanged.
+    if matches(&keybinds.detach) && model.active_server_id() != &supervisor::ServerId::main() {
+        return Some(ClientInputDispatch::DetachAll);
+    }
+
     // next/prev workspace + agent: step the aggregated list and route the focus exactly like the
     // mouse workspace/agent-click path (FocusRoute -> ApiRequest, crossing servers as needed).
     if matches(&keybinds.next_workspace) {
@@ -9418,6 +9429,33 @@ mod tests {
                 assert_eq!(
                     press_char('q', &mut compositor, &mut model),
                     ClientInputDispatch::Forward(vec![0x02, b'q'])
+                );
+                assert!(!compositor.prefix_armed());
+            },
+        );
+    }
+
+    // self-use: when a REMOTE server is the active one, detach (prefix+q) must exit herdr
+    // entirely in ONE press — forwarding the raw prefix+q to the remote would only drop that
+    // link (its `ServerShutdown` handler removes the host but keeps the client running), forcing
+    // a second prefix+q to actually exit herdr. The client dispatches `DetachAll` (the same
+    // action the client menu "detach" uses) so every server gets `ClientMessage::Detach` and the
+    // client loop exits.
+    #[test]
+    fn prefix_then_detach_with_remote_active_exits_everything() {
+        with_client_keys_config(
+            "[keys]\nprefix = \"ctrl+b\"\ndetach = \"prefix+q\"\n",
+            || {
+                let (mut model, remote_id) = mixed_remote_model();
+                model.set_active_server(remote_id).unwrap();
+                let mut compositor = compositor::ClientCompositor::new(26);
+                assert_eq!(
+                    dispatch_composited_input(vec![0x02], &mut compositor, &mut model, (60, 16)),
+                    ClientInputDispatch::Redraw
+                );
+                assert_eq!(
+                    press_char('q', &mut compositor, &mut model),
+                    ClientInputDispatch::DetachAll
                 );
                 assert!(!compositor.prefix_armed());
             },
